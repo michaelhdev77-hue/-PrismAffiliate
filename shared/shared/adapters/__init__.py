@@ -6,6 +6,7 @@ from .ebay import EbayAdapter
 from .cj_affiliate import CJAffiliateAdapter
 from .awin import AwinAdapter
 from .rakuten import RakutenAdapter
+from .aliexpress import AliExpressAdapter
 
 REGISTRY: dict[str, BaseMarketplaceAdapter] = {
     # Global — Tier 1
@@ -14,6 +15,8 @@ REGISTRY: dict[str, BaseMarketplaceAdapter] = {
     "rakuten": RakutenAdapter(),
     "cj_affiliate": CJAffiliateAdapter(),
     "awin": AwinAdapter(),
+    # Global — Tier 2
+    "aliexpress": AliExpressAdapter(),
     # Russia / CIS
     "admitad": AdmitadAdapter(),
     "gdeslon": GdeSlonAdapter(),
