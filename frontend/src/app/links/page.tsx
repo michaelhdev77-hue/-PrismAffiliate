@@ -20,7 +20,11 @@ export default function LinksPage() {
     setTimeout(() => setCopied(null), 2000)
   }
 
-  const MKT: Record<string,string> = { admitad:'Admitad', gdeslon:'GdeSlon', amazon:'Amazon', ebay:'eBay', aliexpress:'AliExpress' }
+  const MKT: Record<string,string> = {
+    amazon:'Amazon', ebay:'eBay', rakuten:'Rakuten',
+    cj_affiliate:'CJ Affiliate', awin:'Awin',
+    admitad:'Admitad', gdeslon:'GdeSlon', aliexpress:'AliExpress',
+  }
 
   return (
     <AuthGuard>

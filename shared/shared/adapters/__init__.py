@@ -2,11 +2,21 @@ from .base import BaseMarketplaceAdapter, ProductSearchResult, AffiliateLinkResu
 from .admitad import AdmitadAdapter
 from .gdeslon import GdeSlonAdapter
 from .amazon import AmazonAdapter
+from .ebay import EbayAdapter
+from .cj_affiliate import CJAffiliateAdapter
+from .awin import AwinAdapter
+from .rakuten import RakutenAdapter
 
 REGISTRY: dict[str, BaseMarketplaceAdapter] = {
+    # Global — Tier 1
+    "amazon": AmazonAdapter(),
+    "ebay": EbayAdapter(),
+    "rakuten": RakutenAdapter(),
+    "cj_affiliate": CJAffiliateAdapter(),
+    "awin": AwinAdapter(),
+    # Russia / CIS
     "admitad": AdmitadAdapter(),
     "gdeslon": GdeSlonAdapter(),
-    "amazon": AmazonAdapter(),
 }
 
 

@@ -5,8 +5,10 @@ import { api, Product } from '@/lib/api'
 import { Search, Filter, Star, Package } from 'lucide-react'
 
 const MKT_LABELS: Record<string,string> = {
-  admitad:'Admitad', gdeslon:'GdeSlon', amazon:'Amazon',
-  ebay:'eBay', aliexpress:'AliExpress', yandex_market:'Яндекс.Маркет',
+  amazon:'Amazon', ebay:'eBay', rakuten:'Rakuten',
+  cj_affiliate:'CJ Affiliate', awin:'Awin',
+  admitad:'Admitad', gdeslon:'GdeSlon',
+  aliexpress:'AliExpress', yandex_market:'Яндекс.Маркет',
 }
 const SORT_OPTIONS = [
   { value:'commission', label:'По комиссии' },

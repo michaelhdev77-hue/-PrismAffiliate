@@ -5,14 +5,15 @@ import { api, Account } from '@/lib/api'
 import { Plus, RefreshCw, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react'
 
 const MKT_OPTIONS = [
-  'admitad','gdeslon','amazon','ebay','aliexpress',
-  'yandex_market','cj_affiliate','awin','walmart','rakuten',
+  'amazon','ebay','rakuten','cj_affiliate','awin',
+  'admitad','gdeslon','aliexpress','yandex_market','walmart',
 ]
 
 const LABELS: Record<string,string> = {
-  admitad:'Admitad', gdeslon:'GdeSlon', amazon:'Amazon', ebay:'eBay',
-  aliexpress:'AliExpress', yandex_market:'Яндекс.Маркет',
-  cj_affiliate:'CJ Affiliate', awin:'Awin', walmart:'Walmart', rakuten:'Rakuten',
+  amazon:'Amazon', ebay:'eBay', rakuten:'Rakuten',
+  cj_affiliate:'CJ Affiliate', awin:'Awin',
+  admitad:'Admitad', gdeslon:'GdeSlon',
+  aliexpress:'AliExpress', yandex_market:'Яндекс.Маркет', walmart:'Walmart',
 }
 
 function HealthIcon({ status }: { status: string }) {
@@ -28,18 +29,35 @@ export default function AccountsPage() {
   const [checking, setChecking] = useState<string | null>(null)
 
   const [form, setForm] = useState({
-    marketplace: 'admitad', display_name: '',
+    marketplace: 'amazon', display_name: '',
+    // Amazon
+    credential_id: '', credential_secret: '', partner_tag: '',
+    // Admitad
     client_id: '', client_secret: '', website_id: '', campaign_id: '',
-    app_key: '', tracking_id: '', api_key: '', affiliate_id: '',
-    partner_tag: '', credential_id: '', credential_secret: '',
+    // GdeSlon / generic API key
+    api_key: '', affiliate_id: '',
+    // AliExpress
+    app_key: '', tracking_id: '',
+    // eBay
+    ebay_client_id: '', ebay_client_secret: '', ebay_campaign_id: '', marketplace_id: 'EBAY_US',
+    // CJ Affiliate
+    personal_access_token: '', cj_website_id: '', company_id: '',
+    // Awin
+    awin_api_token: '', publisher_id: '', datafeed_api_key: '',
+    // Rakuten
+    rakuten_username: '', rakuten_password: '', sid: '', rakuten_publisher_id: '',
   })
 
   function buildCredentials() {
     const m = form.marketplace
-    if (m === 'admitad')  return { client_id: form.client_id, client_secret: form.client_secret, website_id: Number(form.website_id), campaign_id: Number(form.campaign_id) }
-    if (m === 'gdeslon')  return { api_key: form.api_key, affiliate_id: form.affiliate_id }
-    if (m === 'amazon')   return { credential_id: form.credential_id, credential_secret: form.credential_secret, partner_tag: form.partner_tag, marketplace: 'www.amazon.com' }
-    if (m === 'aliexpress') return { app_key: form.app_key, app_secret: form.client_secret, tracking_id: form.tracking_id }
+    if (m === 'admitad')     return { client_id: form.client_id, client_secret: form.client_secret, website_id: Number(form.website_id), campaign_id: Number(form.campaign_id) }
+    if (m === 'gdeslon')     return { api_key: form.api_key, affiliate_id: form.affiliate_id }
+    if (m === 'amazon')      return { credential_id: form.credential_id, credential_secret: form.credential_secret, partner_tag: form.partner_tag, marketplace: 'www.amazon.com' }
+    if (m === 'aliexpress')  return { app_key: form.app_key, app_secret: form.client_secret, tracking_id: form.tracking_id }
+    if (m === 'ebay')        return { client_id: form.ebay_client_id, client_secret: form.ebay_client_secret, campaign_id: form.ebay_campaign_id, marketplace_id: form.marketplace_id }
+    if (m === 'cj_affiliate') return { personal_access_token: form.personal_access_token, website_id: form.cj_website_id, company_id: form.company_id }
+    if (m === 'awin')        return { api_token: form.awin_api_token, publisher_id: form.publisher_id, datafeed_api_key: form.datafeed_api_key }
+    if (m === 'rakuten')     return { username: form.rakuten_username, password: form.rakuten_password, sid: form.sid, publisher_id: form.rakuten_publisher_id }
     return { api_key: form.api_key }
   }
 
@@ -208,8 +226,45 @@ export default function AccountsPage() {
                 <CredField label="Tracking ID" value={form.tracking_id} onChange={v => setForm(f=>({...f,tracking_id:v}))} />
               </>}
 
-              {/* Generic */}
-              {!['admitad','gdeslon','amazon','aliexpress'].includes(form.marketplace) && <>
+              {/* eBay fields */}
+              {form.marketplace === 'ebay' && <>
+                <CredField label="Client ID" value={form.ebay_client_id} onChange={v => setForm(f=>({...f,ebay_client_id:v}))} placeholder="YourAppI-XXXX-PRD-..." />
+                <CredField label="Client Secret" value={form.ebay_client_secret} onChange={v => setForm(f=>({...f,ebay_client_secret:v}))} secret />
+                <CredField label="EPN Campaign ID" value={form.ebay_campaign_id} onChange={v => setForm(f=>({...f,ebay_campaign_id:v}))} placeholder="5338XXXXXXXXX" />
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Marketplace</label>
+                  <select value={form.marketplace_id} onChange={e => setForm(f=>({...f,marketplace_id:e.target.value}))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    {['EBAY_US','EBAY_GB','EBAY_DE','EBAY_AU','EBAY_CA','EBAY_FR','EBAY_IT','EBAY_ES','EBAY_IN'].map(m =>
+                      <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </>}
+
+              {/* CJ Affiliate fields */}
+              {form.marketplace === 'cj_affiliate' && <>
+                <CredField label="Personal Access Token" value={form.personal_access_token} onChange={v => setForm(f=>({...f,personal_access_token:v}))} secret />
+                <CredField label="Website ID" value={form.cj_website_id} onChange={v => setForm(f=>({...f,cj_website_id:v}))} placeholder="XXXXXXXX" />
+                <CredField label="Company ID (CID)" value={form.company_id} onChange={v => setForm(f=>({...f,company_id:v}))} placeholder="XXXXXXXX" />
+              </>}
+
+              {/* Awin fields */}
+              {form.marketplace === 'awin' && <>
+                <CredField label="API Token" value={form.awin_api_token} onChange={v => setForm(f=>({...f,awin_api_token:v}))} secret />
+                <CredField label="Publisher ID" value={form.publisher_id} onChange={v => setForm(f=>({...f,publisher_id:v}))} placeholder="123456" />
+                <CredField label="Datafeed API Key" value={form.datafeed_api_key} onChange={v => setForm(f=>({...f,datafeed_api_key:v}))} secret />
+              </>}
+
+              {/* Rakuten fields */}
+              {form.marketplace === 'rakuten' && <>
+                <CredField label="Username" value={form.rakuten_username} onChange={v => setForm(f=>({...f,rakuten_username:v}))} />
+                <CredField label="Password" value={form.rakuten_password} onChange={v => setForm(f=>({...f,rakuten_password:v}))} secret />
+                <CredField label="Site ID (scope)" value={form.sid} onChange={v => setForm(f=>({...f,sid:v}))} placeholder="1234567" />
+                <CredField label="Publisher ID (11 chars)" value={form.rakuten_publisher_id} onChange={v => setForm(f=>({...f,rakuten_publisher_id:v}))} placeholder="XXXXXXXXXXX" />
+              </>}
+
+              {/* Generic fallback */}
+              {!['admitad','gdeslon','amazon','aliexpress','ebay','cj_affiliate','awin','rakuten'].includes(form.marketplace) && <>
                 <CredField label="API Key" value={form.api_key} onChange={v => setForm(f=>({...f,api_key:v}))} secret />
               </>}
             </div>

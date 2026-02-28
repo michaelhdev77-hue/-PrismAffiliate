@@ -6,8 +6,10 @@ import { api, AnalyticsOverview, StatRow } from '@/lib/api'
 import { BarChart3 } from 'lucide-react'
 
 const MKT: Record<string,string> = {
-  admitad:'Admitad', gdeslon:'GdeSlon', amazon:'Amazon',
-  ebay:'eBay', aliexpress:'AliExpress', yandex_market:'Яндекс.Маркет',
+  amazon:'Amazon', ebay:'eBay', rakuten:'Rakuten',
+  cj_affiliate:'CJ Affiliate', awin:'Awin',
+  admitad:'Admitad', gdeslon:'GdeSlon',
+  aliexpress:'AliExpress', yandex_market:'Яндекс.Маркет',
 }
 
 function fmt(n: number, currency = false) {
