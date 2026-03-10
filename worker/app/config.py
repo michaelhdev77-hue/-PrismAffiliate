@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     links_service_url: str = "http://links:8012"
     tracker_service_url: str = "http://tracker:8013"
     analytics_service_url: str = "http://analytics:8014"
+    prism_content_url: str = "http://content:8007"
     encryption_key: str = ""
 
 

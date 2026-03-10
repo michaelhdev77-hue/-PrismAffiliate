@@ -75,6 +75,10 @@ class BaseMarketplaceAdapter(ABC):
         """Convert a product URL into an affiliate-tracked URL."""
         ...
 
+    def fetch_program_feeds(self, credentials: dict, website_id: str) -> list[dict]:
+        """Fetch available product feeds. Override in adapters that support this."""
+        return []
+
     def fetch_feed(self, feed_url: str, credentials: dict) -> bytes:
         """Download a product feed file. Default implementation: plain HTTP GET."""
         resp = httpx.get(feed_url, timeout=300, follow_redirects=True)

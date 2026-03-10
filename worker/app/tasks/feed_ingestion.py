@@ -33,12 +33,12 @@ def dispatch_feed_syncs():
 
 
 async def _dispatch_feed_syncs():
-    from app.tasks._catalog_models import ProductFeed, FeedStatus
+    from app.tasks._catalog_models import ProductFeed
     SessionLocal = _make_catalog_session()
     async with SessionLocal() as db:
         result = await db.execute(
             select(ProductFeed).where(
-                ProductFeed.status.in_([FeedStatus.active, FeedStatus.error])
+                ProductFeed.status.in_(["active", "error", "syncing"])
             )
         )
         feeds = result.scalars().all()
@@ -58,7 +58,7 @@ def sync_feed(self, feed_id: str):
 
 
 async def _sync_feed(feed_id: str):
-    from app.tasks._catalog_models import ProductFeed, FeedStatus, MarketplaceAccount, Product
+    from app.tasks._catalog_models import ProductFeed, MarketplaceAccount, Product
     from sys import modules
 
     # Dynamic import of YML parser (service code isn't in worker package)
@@ -77,7 +77,7 @@ async def _sync_feed(feed_id: str):
             return
 
         # Mark syncing
-        feed.status = FeedStatus.syncing
+        feed.status = "syncing"
         await db.commit()
 
     try:
@@ -88,19 +88,21 @@ async def _sync_feed(feed_id: str):
         raw = adapter.fetch_feed(feed.feed_url, credentials)
 
         # Parse based on format
-        products_data = _parse_feed(raw, feed.feed_format.value, feed.niche_mapping, feed.category_mapping)
+        fmt = feed.feed_format.value if hasattr(feed.feed_format, "value") else feed.feed_format
+        products_data = _parse_feed(raw, fmt, feed.niche_mapping, feed.category_mapping)
 
         # Upsert products
         count = await _upsert_products(
             products_data=products_data,
             marketplace=account.marketplace,
             marketplace_account_id=account.id,
+            campaign_id=feed.campaign_id,
             feed_id=feed_id,
         )
 
         async with SessionLocal() as db:
             feed = await db.get(ProductFeed, feed_id)
-            feed.status = FeedStatus.active
+            feed.status = "active"
             feed.last_sync_at = datetime.utcnow()
             feed.last_sync_products = count
             feed.last_error = None
@@ -112,7 +114,7 @@ async def _sync_feed(feed_id: str):
         async with SessionLocal() as db:
             feed = await db.get(ProductFeed, feed_id)
             if feed:
-                feed.status = FeedStatus.error
+                feed.status = "error"
                 feed.last_error = str(exc)[:1000]
                 await db.commit()
         raise
@@ -157,6 +159,7 @@ async def _upsert_products(
     marketplace: str,
     marketplace_account_id: str,
     feed_id: str,
+    campaign_id: str | None = None,
 ) -> int:
     from app.tasks._catalog_models import Product
     SessionLocal = _make_catalog_session()
@@ -170,6 +173,7 @@ async def _upsert_products(
                     external_id=p["external_id"],
                     marketplace=marketplace,
                     marketplace_account_id=marketplace_account_id,
+                    campaign_id=campaign_id,
                     feed_id=feed_id,
                     title=p["title"],
                     description=p.get("description"),

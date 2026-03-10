@@ -18,6 +18,10 @@ class AffiliateLink(Base):
     affiliate_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     short_code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
 
+    # Tracking
+    sub_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    channel: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # "pinterest", "telegram", etc.
+
     # PRISM integration
     prism_content_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     prism_project_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)

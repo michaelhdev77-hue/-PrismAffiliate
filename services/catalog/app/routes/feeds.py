@@ -8,13 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.deps import require_auth
-from app.models import ProductFeed, FeedFormat, FeedStatus
+from app.config import settings
+from app.models import ProductFeed, FeedFormat, FeedStatus, MarketplaceAccount, Campaign
+from shared.encryption import decrypt_json
+from shared.adapters import get_adapter
+from shared.adapters.base import BaseMarketplaceAdapter
 
 router = APIRouter()
 
 
+class AutoDiscoverRequest(BaseModel):
+    marketplace_account_id: str
+
+
 class FeedCreate(BaseModel):
     marketplace_account_id: str
+    campaign_id: Optional[str] = None
     name: str
     feed_format: FeedFormat
     feed_url: Optional[str] = None
@@ -37,6 +46,7 @@ class FeedUpdate(BaseModel):
 class FeedOut(BaseModel):
     id: str
     marketplace_account_id: str
+    campaign_id: Optional[str]
     name: str
     feed_format: FeedFormat
     feed_url: Optional[str]
@@ -50,6 +60,42 @@ class FeedOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+@router.post("/auto-discover")
+async def auto_discover_feeds(
+    body: AutoDiscoverRequest,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    """Auto-discover Admitad feed URLs for an account."""
+    account = await db.get(MarketplaceAccount, body.marketplace_account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    credentials = decrypt_json(account.credentials_encrypted, settings.encryption_key)
+
+    adapter = get_adapter(account.marketplace.value if hasattr(account.marketplace, "value") else str(account.marketplace))
+
+    if not hasattr(adapter, "fetch_program_feeds") or adapter.fetch_program_feeds.__func__ is BaseMarketplaceAdapter.fetch_program_feeds:
+        raise HTTPException(status_code=400, detail="Auto-discovery not supported for this marketplace")
+
+    website_id = credentials.get("website_id", "")
+    if not website_id:
+        raise HTTPException(status_code=400, detail="website_id not found in account credentials")
+
+    feeds = adapter.fetch_program_feeds(credentials, str(website_id))
+
+    # Filter to only show feeds from campaigns added by the user
+    result = await db.execute(
+        select(Campaign).where(Campaign.marketplace_account_id == account.id)
+    )
+    user_campaigns = result.scalars().all()
+    if user_campaigns:
+        allowed_ids = {c.external_campaign_id for c in user_campaigns}
+        feeds = [f for f in feeds if f.get("campaign_id") in allowed_ids]
+
+    return feeds
 
 
 @router.get("/", response_model=list[FeedOut])

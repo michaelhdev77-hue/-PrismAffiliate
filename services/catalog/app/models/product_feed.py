@@ -29,6 +29,7 @@ class ProductFeed(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     marketplace_account_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    campaign_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     feed_format: Mapped[FeedFormat] = mapped_column(SAEnum(FeedFormat), nullable=False)
     feed_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)

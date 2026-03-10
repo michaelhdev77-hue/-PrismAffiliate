@@ -24,6 +24,7 @@ async def generate_link_for_product(
     catalog_url: str,
     encryption_key: str,
     sub_id: Optional[str] = None,
+    channel: Optional[str] = None,
 ) -> dict:
     """
     Fetch product info from catalog, get credentials for its marketplace account,
@@ -41,6 +42,11 @@ async def generate_link_for_product(
         account = accounts_resp.json()
 
     credentials = decrypt_json(account["credentials_encrypted"], encryption_key)
+
+    # If the product has a campaign, override campaign_id in credentials
+    if account.get("campaign_external_id"):
+        credentials["campaign_id"] = int(account["campaign_external_id"])
+
     adapter = get_adapter(product["marketplace"])
     result = adapter.generate_affiliate_link(
         product_url=product["product_url"],
@@ -54,4 +60,6 @@ async def generate_link_for_product(
         "marketplace": product["marketplace"],
         "marketplace_account_id": account["id"],
         "expires_at": result.expires_at,
+        "sub_id": sub_id,
+        "channel": channel,
     }

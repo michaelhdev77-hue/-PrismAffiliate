@@ -27,7 +27,19 @@ export const api = {
     list: () => req<Account[]>(`${CATALOG}/api/v1/marketplace-accounts/`),
     create: (body: object) => req<Account>(`${CATALOG}/api/v1/marketplace-accounts/`, { method: 'POST', body: JSON.stringify(body) }),
     healthcheck: (id: string) => req<object>(`${CATALOG}/api/v1/marketplace-accounts/${id}/healthcheck`, { method: 'POST' }),
+    discoverPrograms: (id: string) => req<DiscoveredProgram[]>(`${CATALOG}/api/v1/marketplace-accounts/${id}/discover-programs`, { method: 'POST' }),
     delete: (id: string) => fetch(`${CATALOG}/api/v1/marketplace-accounts/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }),
+  },
+  campaigns: {
+    list: (accountId?: string) => {
+      const qs = accountId ? `?marketplace_account_id=${accountId}` : ''
+      return req<Campaign[]>(`${CATALOG}/api/v1/campaigns/${qs}`)
+    },
+    create: (body: object) => req<Campaign>(`${CATALOG}/api/v1/campaigns/`, { method: 'POST', body: JSON.stringify(body) }),
+    delete: (id: string) => fetch(`${CATALOG}/api/v1/campaigns/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${getToken()}` },
     }),
@@ -40,6 +52,11 @@ export const api = {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${getToken()}` },
     }),
+    autoDiscover: (marketplace_account_id: string) =>
+      req<Array<{name: string, xml_link: string, csv_link: string, campaign_name: string, campaign_id: string}>>(
+        `${CATALOG}/api/v1/feeds/auto-discover`,
+        { method: 'POST', body: JSON.stringify({ marketplace_account_id }) }
+      ),
   },
   products: {
     search: (params: Record<string, string>) => {
@@ -47,6 +64,13 @@ export const api = {
       return req<Product[]>(`${CATALOG}/api/v1/products/?${qs}`)
     },
     categories: () => req<string[]>(`${CATALOG}/api/v1/products/categories`),
+  },
+  bridge: {
+    pushToPrism: (prism_project_id?: string) =>
+      req<{status: string}>(`${CATALOG}/api/v1/bridge/push-to-prism`, {
+        method: 'POST',
+        body: JSON.stringify({ prism_project_id }),
+      }),
   },
 
   // ── Links ──────────────────────────────────────────────────────────────
@@ -80,9 +104,22 @@ export interface Account {
   created_at: string
 }
 
+export interface Campaign {
+  id: string
+  marketplace_account_id: string
+  name: string
+  external_campaign_id: string
+  marketplace_label: string | null
+  config: object
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Feed {
   id: string
   marketplace_account_id: string
+  campaign_id: string | null
   name: string
   feed_format: string
   feed_url: string | null
@@ -137,6 +174,17 @@ export interface AnalyticsOverview {
   total_revenue: number
   total_commission: number
   period_days: number
+}
+
+export interface DiscoveredProgram {
+  id: string
+  name: string
+  status: string
+  currency: string
+  categories: string[]
+  avg_money_transfer_time: number | null
+  cr: number | null
+  ecpc: number | null
 }
 
 export interface StatRow {

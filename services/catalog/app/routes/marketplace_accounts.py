@@ -119,6 +119,42 @@ async def delete_account(
     await db.commit()
 
 
+@router.post("/{account_id}/discover-programs")
+async def discover_programs(
+    account_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    """Fetch connected programs from the affiliate network API."""
+    account = await db.get(MarketplaceAccount, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    credentials = decrypt_json(account.credentials_encrypted, settings.encryption_key)
+    try:
+        adapter = get_adapter(account.marketplace.value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="No adapter for this marketplace")
+
+    if not hasattr(adapter, "list_programs"):
+        raise HTTPException(status_code=400, detail="This marketplace does not support program discovery")
+
+    website_id = credentials.get("website_id", "")
+    if not website_id:
+        raise HTTPException(status_code=400, detail="No website_id in credentials")
+
+    try:
+        programs = adapter.list_programs(credentials, str(website_id))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch programs: {exc}")
+
+    # Re-encrypt credentials (token may have been refreshed)
+    account.credentials_encrypted = encrypt_json(credentials, settings.encryption_key)
+    await db.commit()
+
+    return programs
+
+
 @router.post("/{account_id}/healthcheck")
 async def healthcheck_account(
     account_id: str,

@@ -77,6 +77,7 @@ class AccountBrief(BaseModel):
     id: str
     marketplace: str
     credentials_encrypted: str
+    campaign_external_id: Optional[str] = None
 
 
 @router.get("/account-for-product/{product_id}", response_model=AccountBrief)
@@ -86,15 +87,23 @@ async def account_for_product(
 ):
     """Returns the marketplace account (with encrypted credentials) for a product."""
     from fastapi import HTTPException
-    from app.models import MarketplaceAccount
+    from app.models import MarketplaceAccount, Campaign
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     account = await db.get(MarketplaceAccount, product.marketplace_account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+
+    campaign_external_id = None
+    if product.campaign_id:
+        campaign = await db.get(Campaign, product.campaign_id)
+        if campaign:
+            campaign_external_id = campaign.external_campaign_id
+
     return AccountBrief(
         id=account.id,
         marketplace=account.marketplace.value,
         credentials_encrypted=account.credentials_encrypted,
+        campaign_external_id=campaign_external_id,
     )

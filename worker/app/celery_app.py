@@ -12,6 +12,7 @@ celery_app = Celery(
         "app.tasks.stats_aggregation",
         "app.tasks.link_refresh",
         "app.tasks.healthcheck",
+        "app.tasks.prism_bridge",
     ],
 )
 
@@ -45,5 +46,10 @@ celery_app.conf.beat_schedule = {
     "healthcheck-accounts": {
         "task": "affiliate.healthcheck_accounts",
         "schedule": crontab(hour="*/6", minute=5),
+    },
+    # Push top affiliate products to PRISM as Pinterest pin drafts daily at 08:00 MSK
+    "push-products-to-prism": {
+        "task": "affiliate.push_products_to_prism",
+        "schedule": crontab(hour=8, minute=0),
     },
 }

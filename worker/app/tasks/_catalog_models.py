@@ -38,6 +38,19 @@ class FeedStatus(str, enum.Enum):
     error = "error"
 
 
+class Campaign(Base):
+    __tablename__ = "campaigns"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    marketplace_account_id: Mapped[str] = mapped_column(String(36))
+    name: Mapped[str] = mapped_column(String(255))
+    external_campaign_id: Mapped[str] = mapped_column(String(100))
+    marketplace_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class MarketplaceAccount(Base):
     __tablename__ = "marketplace_accounts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -56,12 +69,13 @@ class ProductFeed(Base):
     __tablename__ = "product_feeds"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     marketplace_account_id: Mapped[str] = mapped_column(String(36))
+    campaign_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     name: Mapped[str] = mapped_column(String(255))
-    feed_format: Mapped[FeedStatus] = mapped_column(String(20))
+    feed_format: Mapped[str] = mapped_column(SAEnum("yml", "xml", "csv", "json", "api", name="feedformat", create_type=False))
     feed_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     search_params: Mapped[dict] = mapped_column(JSON, default=dict)
     schedule_cron: Mapped[str] = mapped_column(String(100))
-    status: Mapped[str] = mapped_column(String(20), default="active")
+    status: Mapped[str] = mapped_column(SAEnum("active", "paused", "syncing", "error", name="feedstatus", create_type=False), default="active")
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_sync_products: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -94,6 +108,7 @@ class Product(Base):
     commission_type: Mapped[str] = mapped_column(String(50), default="percentage")
     tags: Mapped[list] = mapped_column(JSON, default=list)
     niche: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    campaign_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     feed_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

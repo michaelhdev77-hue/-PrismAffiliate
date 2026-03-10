@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import AuthGuard from '@/components/AuthGuard'
-import { api, Feed, Account } from '@/lib/api'
-import { Plus, RefreshCw, Trash2, Play } from 'lucide-react'
+import { api, Feed, Account, Campaign } from '@/lib/api'
+import { Plus, RefreshCw, Trash2, Play, X, Radar } from 'lucide-react'
 
 const FORMAT_LABELS: Record<string,string> = { yml:'YML', xml:'XML', csv:'CSV', json:'JSON', api:'API' }
 const STATUS_COLORS: Record<string,string> = {
@@ -15,18 +15,24 @@ const STATUS_COLORS: Record<string,string> = {
 export default function FeedsPage() {
   const [feeds, setFeeds]       = useState<Feed[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading]   = useState(true)
   const [syncing, setSyncing]   = useState<string|null>(null)
   const [modal, setModal]       = useState(false)
+  const [discoverModal, setDiscoverModal] = useState(false)
+  const [discovering, setDiscovering] = useState(false)
+  const [discoveredFeeds, setDiscoveredFeeds] = useState<Array<{name: string, xml_link: string, csv_link: string, campaign_name: string, campaign_id: string, account_id: string, account_name: string}>>([])
+  const [selectedDiscovered, setSelectedDiscovered] = useState<Set<string>>(new Set())
+  const [addingFeeds, setAddingFeeds] = useState(false)
   const [form, setForm]         = useState({
-    marketplace_account_id: '', name: '', feed_format: 'yml',
+    marketplace_account_id: '', campaign_id: '', name: '', feed_format: 'yml',
     feed_url: '', schedule_cron: '0 */6 * * *',
   })
 
   async function load() {
     setLoading(true)
-    const [f, a] = await Promise.all([api.feeds.list().catch(()=>[]), api.accounts.list().catch(()=>[])])
-    setFeeds(f); setAccounts(a)
+    const [f, a, c] = await Promise.all([api.feeds.list().catch(()=>[]), api.accounts.list().catch(()=>[]), api.campaigns.list().catch(()=>[])])
+    setFeeds(f); setAccounts(a); setCampaigns(c)
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -42,6 +48,7 @@ export default function FeedsPage() {
     if (!form.marketplace_account_id || !form.name) return
     await api.feeds.create({
       marketplace_account_id: form.marketplace_account_id,
+      campaign_id: form.campaign_id || null,
       name: form.name,
       feed_format: form.feed_format,
       feed_url: form.feed_url || null,
@@ -49,6 +56,61 @@ export default function FeedsPage() {
       category_mapping: {}, niche_mapping: {},
     })
     setModal(false); load()
+  }
+
+  async function discoverAllFeeds() {
+    setDiscoverModal(true)
+    setDiscovering(true)
+    setDiscoveredFeeds([])
+    setSelectedDiscovered(new Set())
+
+    const allFeeds: typeof discoveredFeeds = []
+    const existingUrls = new Set(feeds.map(f => f.feed_url).filter(Boolean))
+
+    await Promise.all(accounts.map(async (a) => {
+      try {
+        const res = await api.feeds.autoDiscover(a.id)
+        for (const df of res) {
+          const url = df.xml_link || df.csv_link
+          if (url && !existingUrls.has(url)) {
+            allFeeds.push({ ...df, account_id: a.id, account_name: a.display_name })
+          }
+        }
+      } catch { /* skip accounts without feed support */ }
+    }))
+
+    setDiscoveredFeeds(allFeeds)
+    if (allFeeds.length > 0) {
+      setSelectedDiscovered(new Set(allFeeds.map(df => df.xml_link || df.csv_link)))
+    }
+    setDiscovering(false)
+  }
+
+  async function addSelectedFeeds() {
+    setAddingFeeds(true)
+    for (const df of discoveredFeeds.filter(d => selectedDiscovered.has(d.xml_link || d.csv_link))) {
+      await api.feeds.create({
+        marketplace_account_id: df.account_id,
+        campaign_id: df.campaign_id || null,
+        name: df.name,
+        feed_format: 'xml',
+        feed_url: df.xml_link || df.csv_link,
+        schedule_cron: '0 */6 * * *',
+        category_mapping: {},
+        niche_mapping: {},
+      }).catch(() => null)
+    }
+    setAddingFeeds(false)
+    setDiscoverModal(false)
+    load()
+  }
+
+  function toggleDiscoveredFeed(url: string) {
+    setSelectedDiscovered(prev => {
+      const next = new Set(prev)
+      if (next.has(url)) next.delete(url); else next.add(url)
+      return next
+    })
   }
 
   function accountName(id: string) {
@@ -63,12 +125,20 @@ export default function FeedsPage() {
             <h1 className="text-2xl font-bold text-slate-900">Фиды товаров</h1>
             <p className="text-sm text-slate-500 mt-0.5">Источники товарных данных для индексации</p>
           </div>
-          <button
-            onClick={() => setModal(true)}
-            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus size={15} /> Добавить фид
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={discoverAllFeeds}
+              className="flex items-center gap-2 border border-brand-200 text-brand-700 hover:bg-brand-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Radar size={15} /> Авто-поиск
+            </button>
+            <button
+              onClick={() => setModal(true)}
+              className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus size={15} /> Добавить фид
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -107,17 +177,29 @@ export default function FeedsPage() {
                       {f.last_error && <p className="text-red-400 truncate max-w-[160px]" title={f.last_error}>{f.last_error}</p>}
                     </td>
                     <td className="px-5 py-3.5">
-                      <button
-                        onClick={() => sync(f.id)}
-                        disabled={syncing === f.id}
-                        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-600 transition-colors disabled:opacity-50"
-                      >
-                        {syncing === f.id
-                          ? <RefreshCw size={12} className="animate-spin" />
-                          : <Play size={12} />
-                        }
-                        Синхр.
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => sync(f.id)}
+                          disabled={syncing === f.id}
+                          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-600 transition-colors disabled:opacity-50"
+                        >
+                          {syncing === f.id
+                            ? <RefreshCw size={12} className="animate-spin" />
+                            : <Play size={12} />
+                          }
+                          Синхр.
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm('Удалить фид?')) return
+                            await api.feeds.delete(f.id)
+                            load()
+                          }}
+                          className="text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -145,6 +227,21 @@ export default function FeedsPage() {
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.display_name}</option>)}
                 </select>
               </div>
+              {form.marketplace_account_id && campaigns.filter(c => c.marketplace_account_id === form.marketplace_account_id).length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Программа (кампания)</label>
+                  <select
+                    value={form.campaign_id}
+                    onChange={e => setForm(f=>({...f, campaign_id: e.target.value}))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Без привязки к программе</option>
+                    {campaigns.filter(c => c.marketplace_account_id === form.marketplace_account_id).map(c =>
+                      <option key={c.id} value={c.id}>{c.name} (ID: {c.external_campaign_id})</option>
+                    )}
+                  </select>
+                </div>
+              )}
               {[
                 { label:'Название', key:'name', placeholder:'Admitad Electronics Feed' },
                 { label:'URL фида', key:'feed_url', placeholder:'https://feeds.admitad.com/...' },
@@ -174,6 +271,82 @@ export default function FeedsPage() {
             <div className="p-6 border-t border-slate-100 flex gap-3">
               <button onClick={() => setModal(false)} className="flex-1 border border-slate-200 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">Отмена</button>
               <button onClick={create} className="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">Добавить</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {discoverModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-slate-900">Авто-поиск фидов</h2>
+                <p className="text-xs text-slate-400 mt-1">Сканирование всех подключённых площадок</p>
+              </div>
+              <button onClick={() => setDiscoverModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {discovering ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw size={20} className="animate-spin text-slate-400" />
+                  <span className="ml-2 text-sm text-slate-400">Сканирование площадок...</span>
+                </div>
+              ) : discoveredFeeds.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">Нет доступных фидов для импорта (все уже добавлены или площадки не поддерживают фиды)</p>
+              ) : (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={selectedDiscovered.size === discoveredFeeds.length}
+                      onChange={() => {
+                        if (selectedDiscovered.size === discoveredFeeds.length) {
+                          setSelectedDiscovered(new Set())
+                        } else {
+                          setSelectedDiscovered(new Set(discoveredFeeds.map(d => d.xml_link || d.csv_link)))
+                        }
+                      }}
+                      className="rounded border-slate-300"
+                    />
+                    Выбрать все ({discoveredFeeds.length})
+                  </label>
+                  {discoveredFeeds.map((df, i) => {
+                    const url = df.xml_link || df.csv_link
+                    return (
+                      <label
+                        key={i}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                          selectedDiscovered.has(url) ? 'border-brand-300 bg-brand-50' : 'border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedDiscovered.has(url)}
+                          onChange={() => toggleDiscoveredFeed(url)}
+                          className="rounded border-slate-300"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-slate-900 truncate">{df.name}</div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-slate-400">{df.campaign_name}</span>
+                            <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{df.account_name}</span>
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-slate-100 flex gap-3">
+              <button onClick={() => setDiscoverModal(false)} className="flex-1 border border-slate-200 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">Отмена</button>
+              <button
+                onClick={addSelectedFeeds}
+                disabled={selectedDiscovered.size === 0 || addingFeeds}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-medium transition-colors"
+              >
+                {addingFeeds ? 'Добавление...' : `Добавить (${selectedDiscovered.size})`}
+              </button>
             </div>
           </div>
         </div>

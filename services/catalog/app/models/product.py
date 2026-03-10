@@ -41,6 +41,7 @@ class Product(Base):
 
     tags: Mapped[list] = mapped_column(JSON, default=list)
     niche: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    campaign_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     feed_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
 
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

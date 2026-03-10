@@ -26,6 +26,15 @@ from .base import (
 )
 
 
+def _clean_title(offer) -> str:
+    """Extract a usable title from a YML offer, filtering out junk values."""
+    for tag in ("name", "model", "typePrefix", "category_name"):
+        val = offer.findtext(tag)
+        if val and val.lower() not in ("none", "null", ""):
+            return val
+    return ""
+
+
 class GdeSlonAdapter(BaseMarketplaceAdapter):
     BASE_URL = "https://www.gdeslon.ru/api"
 
@@ -116,7 +125,7 @@ class GdeSlonAdapter(BaseMarketplaceAdapter):
                 results.append(
                     ProductSearchResult(
                         external_id=offer.get("id", ""),
-                        title=offer.findtext("name") or offer.findtext("model") or "",
+                        title=_clean_title(offer) or categories.get(cat_id, cat_id),
                         description=offer.findtext("description") or "",
                         category=categories.get(cat_id, cat_id),
                         price=price_raw,

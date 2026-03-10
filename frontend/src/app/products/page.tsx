@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import AuthGuard from '@/components/AuthGuard'
 import { api, Product } from '@/lib/api'
-import { Search, Filter, Star, Package } from 'lucide-react'
+import { Search, Filter, Star, Package, Send } from 'lucide-react'
 
 const MKT_LABELS: Record<string,string> = {
   amazon:'Amazon', ebay:'eBay', rakuten:'Rakuten',
@@ -21,6 +21,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [pushing, setPushing] = useState(false)
   const [filters, setFilters] = useState({
     q: '', category: '', marketplace: '', min_commission: '',
     min_price: '', max_price: '', sort: 'commission',
@@ -53,9 +54,24 @@ export default function ProductsPage() {
   return (
     <AuthGuard>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Товары</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Поиск по локальному индексу товаров</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Товары</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Поиск по локальному индексу товаров</p>
+          </div>
+          <button
+            onClick={async () => {
+              setPushing(true)
+              await api.bridge.pushToPrism().catch(() => null)
+              setPushing(false)
+              alert('Задача поставлена в очередь')
+            }}
+            disabled={pushing}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            <Send size={14} />
+            {pushing ? 'Отправка...' : 'Отправить в PRISM'}
+          </button>
         </div>
 
         {/* Filters */}

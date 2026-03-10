@@ -42,10 +42,15 @@ def parse_yml_feed(raw: bytes, niche_mapping: dict = None, category_mapping: dic
     for offer in shop.findall("offers/offer"):
         try:
             external_id = offer.get("id", "")
+            raw_name = offer.findtext("name") or ""
+            # Some feeds (e.g. Shopee) put literal "None" as name
+            if raw_name.lower() in ("none", ""):
+                raw_name = ""
             title = (
-                offer.findtext("name")
+                raw_name
                 or offer.findtext("model")
                 or offer.findtext("typePrefix")
+                or offer.findtext("category_name")
                 or ""
             )
             price = float(offer.findtext("price") or 0)

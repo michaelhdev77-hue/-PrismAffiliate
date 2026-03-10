@@ -21,6 +21,8 @@ class BulkLinkRequest(BaseModel):
     product_ids: list[str]
     prism_content_id: Optional[str] = None
     prism_project_id: Optional[str] = None
+    channel: Optional[str] = None  # "pinterest" | "telegram" | None
+    sub_id_prefix: Optional[str] = None  # prefix for auto-generated subid
 
 
 class LinkBrief(BaseModel):
@@ -44,10 +46,19 @@ async def generate_for_content(
     results = []
     for product_id in body.product_ids:
         try:
+            # Build sub_id from prefix + product_id fragment when channel is set
+            sub_id = None
+            if body.channel and body.sub_id_prefix:
+                sub_id = f"{body.sub_id_prefix}_{product_id[:8]}"
+            elif body.channel:
+                sub_id = product_id[:8]
+
             link_data = await generate_link_for_product(
                 product_id=product_id,
                 catalog_url=settings.catalog_service_url,
                 encryption_key=settings.encryption_key,
+                sub_id=sub_id,
+                channel=body.channel,
             )
             link = AffiliateLink(
                 product_id=product_id,
@@ -55,6 +66,8 @@ async def generate_for_content(
                 marketplace_account_id=link_data["marketplace_account_id"],
                 affiliate_url=link_data["affiliate_url"],
                 short_code=link_data["short_code"],
+                sub_id=link_data["sub_id"],
+                channel=link_data["channel"],
                 prism_content_id=body.prism_content_id,
                 prism_project_id=body.prism_project_id,
             )
@@ -70,6 +83,22 @@ async def generate_for_content(
             continue
     await db.commit()
     return results
+
+
+@router.get("/links/by-subid/{sub_id}")
+async def get_link_by_subid(sub_id: str, db: AsyncSession = Depends(get_db)):
+    stmt = select(AffiliateLink).where(AffiliateLink.sub_id == sub_id)
+    result = await db.execute(stmt)
+    link = result.scalar_one_or_none()
+    if not link:
+        raise HTTPException(status_code=404, detail="Link not found")
+    return {
+        "id": link.id,
+        "product_id": link.product_id,
+        "affiliate_url": link.affiliate_url,
+        "prism_content_id": link.prism_content_id,
+        "prism_project_id": link.prism_project_id,
+    }
 
 
 @router.get("/links/resolve/{short_code}", response_model=ResolveResponse)

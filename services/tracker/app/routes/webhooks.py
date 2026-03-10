@@ -3,15 +3,19 @@ Conversion webhook receivers — called by marketplace/network postback URLs.
 Each marketplace has a different payload format.
 """
 import uuid
+import logging
 from datetime import datetime
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Request, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models import ConversionEvent
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,6 +44,22 @@ async def admitad_postback(
         conversion_status="pending",
         converted_at=datetime.utcnow(),
     )
+
+    # Resolve subid to get product and PRISM context
+    if payload.subid:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"http://links:8012/internal/links/by-subid/{payload.subid}")
+                if resp.status_code == 200:
+                    link_data = resp.json()
+                    event.affiliate_link_id = link_data.get("id")
+                    event.product_id = link_data.get("product_id")
+                    event.prism_content_id = link_data.get("prism_content_id")
+                    event.prism_project_id = link_data.get("prism_project_id")
+                    event.marketplace_account_id = link_data.get("marketplace_account_id")
+        except Exception as exc:
+            logger.warning("Failed to resolve subid %s: %s", payload.subid, exc)
+
     db.add(event)
     await db.commit()
     return {"status": "ok"}
