@@ -20,10 +20,16 @@ from shared.encryption import decrypt_json
 
 logger = logging.getLogger(__name__)
 
+_catalog_engine = None
+_catalog_session_factory = None
 
-def _make_catalog_session() -> async_sessionmaker:
-    engine = create_async_engine(settings.catalog_db_url, pool_pre_ping=True)
-    return async_sessionmaker(engine, expire_on_commit=False)
+
+def _make_catalog_session():
+    global _catalog_engine, _catalog_session_factory
+    if _catalog_engine is None:
+        _catalog_engine = create_async_engine(settings.catalog_db_url, pool_pre_ping=True, pool_recycle=3600)
+        _catalog_session_factory = async_sessionmaker(_catalog_engine, class_=AsyncSession, expire_on_commit=False)
+    return _catalog_session_factory()
 
 
 @celery_app.task(name="affiliate.dispatch_feed_syncs")
@@ -34,8 +40,7 @@ def dispatch_feed_syncs():
 
 async def _dispatch_feed_syncs():
     from app.tasks._catalog_models import ProductFeed
-    SessionLocal = _make_catalog_session()
-    async with SessionLocal() as db:
+    async with _make_catalog_session() as db:
         result = await db.execute(
             select(ProductFeed).where(
                 ProductFeed.status.in_(["active", "error", "syncing"])
@@ -64,8 +69,7 @@ async def _sync_feed(feed_id: str):
     # Dynamic import of YML parser (service code isn't in worker package)
     import importlib.util, os
 
-    SessionLocal = _make_catalog_session()
-    async with SessionLocal() as db:
+    async with _make_catalog_session() as db:
         feed = await db.get(ProductFeed, feed_id)
         if not feed:
             logger.warning(f"Feed {feed_id} not found")
@@ -100,7 +104,7 @@ async def _sync_feed(feed_id: str):
             feed_id=feed_id,
         )
 
-        async with SessionLocal() as db:
+        async with _make_catalog_session() as db:
             feed = await db.get(ProductFeed, feed_id)
             feed.status = "active"
             feed.last_sync_at = datetime.utcnow()
@@ -111,7 +115,7 @@ async def _sync_feed(feed_id: str):
         logger.info(f"Feed {feed_id} synced: {count} products")
 
     except Exception as exc:
-        async with SessionLocal() as db:
+        async with _make_catalog_session() as db:
             feed = await db.get(ProductFeed, feed_id)
             if feed:
                 feed.status = "error"
@@ -127,7 +131,17 @@ def _parse_feed(raw: bytes, fmt: str, niche_mapping: dict, category_mapping: dic
         results = adapter._parse_yml_response(raw)
         # Convert dataclasses to dicts
         parsed = []
+        skipped = 0
         for r in results:
+            # Skip junk products: no real title or no image
+            title = (r.title or "").strip()
+            if not title or title.lower() == "none" or title == r.category:
+                skipped += 1
+                continue
+            if not (r.image_url or "").strip():
+                skipped += 1
+                continue
+
             niche = niche_mapping.get(r.category)
             category = category_mapping.get(r.category, r.category)
             parsed.append({
@@ -150,6 +164,8 @@ def _parse_feed(raw: bytes, fmt: str, niche_mapping: dict, category_mapping: dic
                 "tags": r.tags,
                 "niche": niche,
             })
+        if skipped:
+            logger.info(f"Feed parse: kept {len(parsed)}, skipped {skipped} (no title/image)")
         return parsed
     raise ValueError(f"Unsupported feed format: {fmt}")
 
@@ -162,11 +178,10 @@ async def _upsert_products(
     campaign_id: str | None = None,
 ) -> int:
     from app.tasks._catalog_models import Product
-    SessionLocal = _make_catalog_session()
     now = datetime.utcnow()
     count = 0
 
-    async with SessionLocal() as db:
+    async with _make_catalog_session() as db:
         for chunk in _chunks(products_data, 500):
             for p in chunk:
                 stmt = pg_insert(Product).values(

@@ -24,6 +24,8 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     worker_prefetch_multiplier=1,
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
 )
 
 celery_app.conf.beat_schedule = {

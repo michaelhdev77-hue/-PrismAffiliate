@@ -17,6 +17,18 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_links_engine = None
+_links_session_factory = None
+
+
+def _make_links_session():
+    from sqlalchemy.ext.asyncio import AsyncSession
+    global _links_engine, _links_session_factory
+    if _links_engine is None:
+        _links_engine = create_async_engine(settings.links_db_url, pool_pre_ping=True, pool_recycle=3600)
+        _links_session_factory = async_sessionmaker(_links_engine, class_=AsyncSession, expire_on_commit=False)
+    return _links_session_factory()
+
 
 @celery_app.task(name="affiliate.refresh_expiring_links")
 def refresh_expiring_links():
@@ -24,13 +36,10 @@ def refresh_expiring_links():
 
 
 async def _refresh_expiring_links():
-    links_engine = create_async_engine(settings.links_db_url, pool_pre_ping=True)
-    LinksSession = async_sessionmaker(links_engine, expire_on_commit=False)
-
     from app.tasks._links_models import AffiliateLink
     threshold = datetime.utcnow() + timedelta(hours=2)
 
-    async with LinksSession() as db:
+    async with _make_links_session() as db:
         result = await db.execute(
             select(AffiliateLink).where(
                 AffiliateLink.expires_at <= threshold,
@@ -56,7 +65,7 @@ async def _refresh_expiring_links():
                     },
                 )
                 resp.raise_for_status()
-                async with LinksSession() as db:
+                async with _make_links_session() as db:
                     old_link = await db.get(AffiliateLink, link.id)
                     if old_link:
                         old_link.is_active = False

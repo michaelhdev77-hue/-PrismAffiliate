@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { clearToken } from '@/lib/auth'
 import {
   LayoutDashboard, Store, Rss, Package, Link2,
-  BarChart3, LogOut, Zap,
+  BarChart3, LogOut, Zap, SlidersHorizontal,
 } from 'lucide-react'
 
 const nav = [
@@ -12,6 +12,7 @@ const nav = [
   { href: '/accounts',  label: 'Площадки',  icon: Store },
   { href: '/feeds',     label: 'Фиды',      icon: Rss },
   { href: '/products',  label: 'Товары',    icon: Package },
+  { href: '/profiles',  label: 'Профили',   icon: SlidersHorizontal },
   { href: '/links',     label: 'Ссылки',    icon: Link2 },
   { href: '/analytics', label: 'Аналитика', icon: BarChart3 },
 ]

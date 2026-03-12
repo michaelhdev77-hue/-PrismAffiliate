@@ -1,9 +1,10 @@
 from typing import Optional
 from datetime import datetime
+import math
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, case, func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -34,24 +35,34 @@ class ProductOut(BaseModel):
     commission_type: str
     tags: list
     niche: Optional[str]
+    campaign_id: Optional[str]
     is_active: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
-@router.get("/", response_model=list[ProductOut])
+class PaginatedProducts(BaseModel):
+    items: list[ProductOut]
+    total: int
+    page: int
+    pages: int
+
+
+@router.get("/", response_model=PaginatedProducts)
 async def search_products(
     q: Optional[str] = Query(None, description="Full-text search in title"),
     category: Optional[str] = Query(None),
     marketplace: Optional[str] = Query(None, description="Comma-separated list"),
+    campaign_id: Optional[str] = Query(None),
     niche: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
     min_commission: Optional[float] = Query(None),
     min_rating: Optional[float] = Query(None),
     in_stock_only: bool = Query(True),
-    sort: str = Query("commission", enum=["commission", "price", "rating", "newest"]),
+    has_image: bool = Query(False, description="Only products with image"),
+    sort: str = Query("commission", enum=["commission", "price", "rating", "newest", "score"]),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -66,6 +77,8 @@ async def search_products(
     if marketplace:
         mkts = [m.strip() for m in marketplace.split(",")]
         filters.append(Product.marketplace.in_(mkts))
+    if campaign_id:
+        filters.append(Product.campaign_id == campaign_id)
     if niche:
         filters.append(Product.niche == niche)
     if min_price is not None:
@@ -78,23 +91,41 @@ async def search_products(
         filters.append(Product.rating >= min_rating)
     if in_stock_only:
         filters.append(Product.in_stock == True)
+    if has_image:
+        filters.append(Product.image_url != "")
+
+    where_clause = and_(*filters)
+
+    total_result = await db.execute(select(sa_func.count(Product.id)).where(where_clause))
+    total = total_result.scalar() or 0
+    pages = math.ceil(total / per_page) if total > 0 else 1
+
+    # Composite score: commission_rate * 0.5 + rating * 0.3 + discount_pct * 0.2
+    _score_expr = (
+        Product.commission_rate * 0.5
+        + sa_func.coalesce(Product.rating, 0) * 0.3
+        + sa_func.coalesce(Product.discount_pct, 0) * 0.2
+    )
 
     order_col = {
         "commission": Product.commission_rate.desc(),
         "price": Product.price.asc(),
         "rating": Product.rating.desc(),
         "newest": Product.created_at.desc(),
+        "score": _score_expr.desc(),
     }[sort]
 
     stmt = (
         select(Product)
-        .where(and_(*filters))
+        .where(where_clause)
         .order_by(order_col)
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
     result = await db.execute(stmt)
-    return result.scalars().all()
+    items = result.scalars().all()
+
+    return PaginatedProducts(items=items, total=total, page=page, pages=pages)
 
 
 @router.get("/categories")

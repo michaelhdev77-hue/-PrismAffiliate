@@ -5,20 +5,27 @@ const LINKS    = process.env.NEXT_PUBLIC_LINKS_URL    || 'http://localhost:8012'
 const ANALYTICS = process.env.NEXT_PUBLIC_ANALYTICS_URL || 'http://localhost:8014'
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const token = getToken()
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...init?.headers,
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`${res.status}: ${text}`)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  try {
+    const token = getToken()
+    const res = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        ...init?.headers,
+      },
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`${res.status}: ${text}`)
+    }
+    return res.json()
+  } finally {
+    clearTimeout(timeout)
   }
-  return res.json()
 }
 
 // ── Catalog ────────────────────────────────────────────────────────────
@@ -61,8 +68,9 @@ export const api = {
   products: {
     search: (params: Record<string, string>) => {
       const qs = new URLSearchParams(params).toString()
-      return req<Product[]>(`${CATALOG}/api/v1/products/?${qs}`)
+      return req<PaginatedProducts>(`${CATALOG}/api/v1/products/?${qs}`)
     },
+    get: (id: string) => req<Product>(`${CATALOG}/api/v1/products/${id}`),
     categories: () => req<string[]>(`${CATALOG}/api/v1/products/categories`),
   },
   bridge: {
@@ -77,12 +85,32 @@ export const api = {
   profiles: {
     list: () => req<Profile[]>(`${LINKS}/api/v1/selection-profiles/`),
     create: (body: object) => req<Profile>(`${LINKS}/api/v1/selection-profiles/`, { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: object) => req<Profile>(`${LINKS}/api/v1/selection-profiles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    delete: (id: string) => fetch(`${LINKS}/api/v1/selection-profiles/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }),
+    run: (prism_project_id: string) =>
+      req<{status: string}>(`${CATALOG}/api/v1/bridge/push-to-prism`, {
+        method: 'POST',
+        body: JSON.stringify({ prism_project_id }),
+      }),
   },
   links: {
     list: (params?: Record<string, string>) => {
       const qs = params ? '?' + new URLSearchParams(params).toString() : ''
       return req<Link[]>(`${LINKS}/api/v1/links/${qs}`)
     },
+    generate: (product_id: string) =>
+      req<Link>(`${LINKS}/api/v1/links/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ product_id }),
+      }),
+    generateBulk: (product_ids: string[]) =>
+      req<{ created: number, failed: number, links: Link[] }>(`${LINKS}/api/v1/links/generate-bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ product_ids }),
+      }),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────
@@ -141,10 +169,19 @@ export interface Product {
   original_price: number | null
   discount_pct: number | null
   image_url: string
+  product_url: string
   rating: number | null
   review_count: number | null
   in_stock: boolean
   commission_rate: number
+  campaign_id: string | null
+}
+
+export interface PaginatedProducts {
+  items: Product[]
+  total: number
+  page: number
+  pages: number
 }
 
 export interface Profile {
@@ -153,9 +190,17 @@ export interface Profile {
   name: string
   marketplaces: string[]
   categories: string[]
+  keywords: string[]
   min_commission_rate: number
+  min_rating: number
+  min_review_count: number
+  price_range_min: number
+  price_range_max: number
+  sort_by: string
   max_products: number
   is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface Link {
@@ -165,6 +210,8 @@ export interface Link {
   affiliate_url: string
   short_code: string
   prism_project_id: string | null
+  expires_at: string | null
+  is_active: boolean
   created_at: string
 }
 

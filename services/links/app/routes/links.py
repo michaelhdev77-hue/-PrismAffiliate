@@ -68,6 +68,60 @@ async def generate_link(
     return link
 
 
+class BulkGenerateRequest(BaseModel):
+    product_ids: list[str]
+    prism_project_id: Optional[str] = None
+
+
+class BulkGenerateResult(BaseModel):
+    created: int
+    failed: int
+    links: list[LinkOut]
+
+
+@router.post("/generate-bulk", response_model=BulkGenerateResult, status_code=status.HTTP_201_CREATED)
+async def generate_bulk_links(
+    body: BulkGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    """Generate affiliate links for multiple products at once."""
+    created_links = []
+    failed = 0
+    for product_id in body.product_ids:
+        # Skip if link already exists
+        existing = await db.execute(
+            select(AffiliateLink).where(
+                AffiliateLink.product_id == product_id,
+                AffiliateLink.is_active == True,
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            continue
+
+        try:
+            link_data = await generate_link_for_product(
+                product_id=product_id,
+                catalog_url=settings.catalog_service_url,
+                encryption_key=settings.encryption_key,
+            )
+            link = AffiliateLink(
+                product_id=product_id,
+                marketplace=link_data["marketplace"],
+                marketplace_account_id=link_data["marketplace_account_id"],
+                affiliate_url=link_data["affiliate_url"],
+                short_code=link_data["short_code"],
+                prism_project_id=body.prism_project_id,
+            )
+            db.add(link)
+            await db.flush()
+            created_links.append(link)
+        except Exception:
+            failed += 1
+    await db.commit()
+    return BulkGenerateResult(created=len(created_links), failed=failed, links=created_links)
+
+
 @router.get("/", response_model=list[LinkOut])
 async def list_links(
     product_id: Optional[str] = None,

@@ -18,6 +18,29 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_tracker_engine = None
+_tracker_session_factory = None
+_analytics_engine = None
+_analytics_session_factory = None
+
+
+def _make_tracker_session():
+    from sqlalchemy.ext.asyncio import AsyncSession
+    global _tracker_engine, _tracker_session_factory
+    if _tracker_engine is None:
+        _tracker_engine = create_async_engine(settings.tracker_db_url, pool_pre_ping=True, pool_recycle=3600)
+        _tracker_session_factory = async_sessionmaker(_tracker_engine, class_=AsyncSession, expire_on_commit=False)
+    return _tracker_session_factory()
+
+
+def _make_analytics_session():
+    from sqlalchemy.ext.asyncio import AsyncSession
+    global _analytics_engine, _analytics_session_factory
+    if _analytics_engine is None:
+        _analytics_engine = create_async_engine(settings.analytics_db_url, pool_pre_ping=True, pool_recycle=3600)
+        _analytics_session_factory = async_sessionmaker(_analytics_engine, class_=AsyncSession, expire_on_commit=False)
+    return _analytics_session_factory()
+
 
 @celery_app.task(name="affiliate.aggregate_daily_stats")
 def aggregate_daily_stats():
@@ -28,14 +51,9 @@ async def _aggregate_daily_stats():
     from app.tasks._tracker_models import ClickEvent, ConversionEvent
     from app.tasks._analytics_models import AffiliateStats
 
-    tracker_engine = create_async_engine(settings.tracker_db_url, pool_pre_ping=True)
-    analytics_engine = create_async_engine(settings.analytics_db_url, pool_pre_ping=True)
-    TrackerSession = async_sessionmaker(tracker_engine, expire_on_commit=False)
-    AnalyticsSession = async_sessionmaker(analytics_engine, expire_on_commit=False)
-
     yesterday = date.today() - timedelta(days=1)
 
-    async with TrackerSession() as db:
+    async with _make_tracker_session() as db:
         # Aggregate clicks by product + project
         click_result = await db.execute(
             select(
@@ -90,7 +108,7 @@ async def _aggregate_daily_stats():
         stats[key]["revenue"] = float(row.revenue or 0)
         stats[key]["commission"] = float(row.commission or 0)
 
-    async with AnalyticsSession() as db:
+    async with _make_analytics_session() as db:
         for (product_id, marketplace, project_id, content_id), values in stats.items():
             stmt = pg_insert(AffiliateStats).values(
                 stat_date=yesterday,

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import AuthGuard from '@/components/AuthGuard'
 import MetricCard from '@/components/MetricCard'
 import { api, AnalyticsOverview, Account, Feed, StatRow } from '@/lib/api'
-import { TrendingUp, Store, RefreshCw, AlertCircle } from 'lucide-react'
+import { TrendingUp, Store, RefreshCw, Package, Link2 } from 'lucide-react'
 
 const MARKETPLACE_LABELS: Record<string, string> = {
   admitad: 'Admitad', gdeslon: 'GdeSlon', amazon: 'Amazon',
@@ -37,6 +37,8 @@ export default function DashboardPage() {
   const [feeds, setFeeds]       = useState<Feed[]>([])
   const [byMkt, setByMkt]       = useState<StatRow[]>([])
   const [period, setPeriod]     = useState(30)
+  const [totalProducts, setTotalProducts] = useState(0)
+  const [totalLinks, setTotalLinks] = useState(0)
   const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
@@ -46,11 +48,15 @@ export default function DashboardPage() {
       api.accounts.list().catch(() => []),
       api.feeds.list().catch(() => []),
       api.analytics.byMarketplace(period).catch(() => []),
-    ]).then(([ov, acc, fd, mkt]) => {
+      api.products.search({ per_page: '1', has_image: 'true' }).catch(() => ({ total: 0 })),
+      api.links.list().catch(() => []),
+    ]).then(([ov, acc, fd, mkt, prod, links]) => {
       setOverview(ov)
       setAccounts(acc)
       setFeeds(fd)
       setByMkt(mkt)
+      setTotalProducts((prod as any).total ?? 0)
+      setTotalLinks(Array.isArray(links) ? links.length : 0)
       setLoading(false)
     })
   }, [period])
@@ -82,7 +88,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-6 gap-4">
+          <MetricCard label="Товаров" value={loading ? '—' : fmt(totalProducts)} color="slate" />
+          <MetricCard label="Ссылок" value={loading ? '—' : fmt(totalLinks)} color="brand" />
           <MetricCard label="Кликов" value={loading ? '—' : fmt(overview?.total_clicks ?? 0)} color="violet" sub={`За ${period} дней`} />
           <MetricCard label="Конверсий" value={loading ? '—' : fmt(overview?.total_conversions ?? 0)} color="green" />
           <MetricCard label="Выручка" value={loading ? '—' : fmt(overview?.total_revenue ?? 0, true)} color="blue" />

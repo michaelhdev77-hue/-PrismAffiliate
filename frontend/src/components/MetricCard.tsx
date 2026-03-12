@@ -2,7 +2,7 @@ interface Props {
   label: string
   value: string | number
   sub?: string
-  color?: 'violet' | 'green' | 'blue' | 'orange'
+  color?: 'violet' | 'green' | 'blue' | 'orange' | 'slate' | 'brand'
 }
 
 const colors = {
@@ -10,6 +10,8 @@ const colors = {
   green:  'bg-green-50 text-green-600',
   blue:   'bg-blue-50 text-blue-600',
   orange: 'bg-orange-50 text-orange-600',
+  slate:  'bg-slate-50 text-slate-700',
+  brand:  'bg-brand-50 text-brand-700',
 }
 
 export default function MetricCard({ label, value, sub, color = 'violet' }: Props) {

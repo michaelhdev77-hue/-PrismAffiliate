@@ -33,8 +33,8 @@ def push_products_to_prism(self, prism_project_id: str = None, max_products: int
 
 async def _push_products(prism_project_id: str = None, max_products: int = 10):
     async with httpx.AsyncClient(timeout=30) as client:
-        # 1. Get selection profiles from links service
-        resp = await client.get(f"{LINKS_URL}/api/v1/selection-profiles/")
+        # 1. Get selection profiles from links service (internal, no JWT)
+        resp = await client.get(f"{LINKS_URL}/internal/selection-profiles")
         profiles = resp.json() if resp.status_code == 200 else []
 
         if prism_project_id:
@@ -151,11 +151,13 @@ async def _push_products(prism_project_id: str = None, max_products: int = 10):
 async def _push_default(client: httpx.AsyncClient, prism_project_id: str, max_products: int):
     """Fallback: push top products without a selection profile."""
     params = {
-        "sort": "commission",
-        "per_page": str(max_products),
-        "in_stock_only": "true",
+        "limit": str(max_products),
+        "has_image": "true",
     }
-    resp = await client.get(f"{CATALOG_URL}/api/v1/products/", params=params)
+    resp = await client.get(
+        f"{CATALOG_URL}/internal/products/for-project/{prism_project_id or 'default'}",
+        params=params,
+    )
     if resp.status_code != 200:
         logger.warning("Failed to fetch default products: %s", resp.text)
         return

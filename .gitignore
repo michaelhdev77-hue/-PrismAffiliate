@@ -41,3 +41,10 @@ Thumbs.db
 # Celery beat schedule
 celerybeat-schedule
 celerybeat.pid
+
+# Test artifacts
+*.db
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/

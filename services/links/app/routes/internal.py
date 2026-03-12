@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.models import AffiliateLink
+from app.models import AffiliateLink, SelectionProfile
 from app.services.link_generator import generate_link_for_product
 from app.config import settings
 
@@ -83,6 +83,35 @@ async def generate_for_content(
             continue
     await db.commit()
     return results
+
+
+@router.get("/selection-profiles")
+async def internal_list_profiles(
+    prism_project_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Internal: list selection profiles (no JWT). Used by bridge worker."""
+    stmt = select(SelectionProfile).where(SelectionProfile.is_active == True)
+    if prism_project_id:
+        stmt = stmt.where(SelectionProfile.prism_project_id == prism_project_id)
+    result = await db.execute(stmt)
+    profiles = result.scalars().all()
+    return [
+        {
+            "id": p.id,
+            "prism_project_id": p.prism_project_id,
+            "name": p.name,
+            "marketplaces": p.marketplaces,
+            "categories": p.categories,
+            "keywords": p.keywords,
+            "min_commission_rate": p.min_commission_rate,
+            "min_rating": p.min_rating,
+            "max_products": p.max_products,
+            "sort_by": p.sort_by,
+            "is_active": p.is_active,
+        }
+        for p in profiles
+    ]
 
 
 @router.get("/links/by-subid/{sub_id}")

@@ -38,7 +38,10 @@ async def products_for_project(
     project_id: str,
     niche: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
-    limit: int = Query(5, ge=1, le=20),
+    marketplace: Optional[str] = Query(None, description="Comma-separated list"),
+    min_commission: Optional[float] = Query(None),
+    has_image: bool = Query(False),
+    limit: int = Query(5, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -50,6 +53,13 @@ async def products_for_project(
         filters.append(Product.niche == niche)
     if category:
         filters.append(Product.category.ilike(f"%{category}%"))
+    if marketplace:
+        mkts = [m.strip() for m in marketplace.split(",")]
+        filters.append(Product.marketplace.in_(mkts))
+    if min_commission is not None:
+        filters.append(Product.commission_rate >= min_commission)
+    if has_image:
+        filters.append(Product.image_url != "")
 
     stmt = (
         select(Product)
@@ -97,9 +107,18 @@ async def account_for_product(
 
     campaign_external_id = None
     if product.campaign_id:
-        campaign = await db.get(Campaign, product.campaign_id)
+        # campaign_id in products stores external_campaign_id, not UUID
+        stmt = select(Campaign).where(
+            Campaign.external_campaign_id == product.campaign_id,
+            Campaign.marketplace_account_id == product.marketplace_account_id,
+        ).limit(1)
+        camp_result = await db.execute(stmt)
+        campaign = camp_result.scalar_one_or_none()
         if campaign:
             campaign_external_id = campaign.external_campaign_id
+        else:
+            # Fallback: campaign_id is already the external ID
+            campaign_external_id = product.campaign_id
 
     return AccountBrief(
         id=account.id,
