@@ -7,47 +7,84 @@ on:
   workflow_dispatch:
 
 jobs:
-  python-tests:
+  test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [catalog, links, analytics, tracker]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install dependencies
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── Shared ──────────────────────────────────────────────
+      - name: Test shared
         run: |
-          cd services/${{ matrix.service }}
+          cd shared
+          pip install -e .
+          pip install -r requirements-test.txt
+          python -m pytest tests/ -v --tb=short
+
+      # ── Catalog ─────────────────────────────────────────────
+      - name: Test catalog
+        run: |
+          cd services/catalog
           pip install -r requirements.txt -r requirements-test.txt
           pip install -e ../../shared
-      - name: Run tests
-        run: |
-          cd services/${{ matrix.service }}
-          python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+          python -m pytest tests/ -v --tb=short
         env:
           DATABASE_URL: sqlite+aiosqlite:///test.db
           SECRET_KEY: test-secret
           ENCRYPTION_KEY: "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlcw=="
           REDIS_URL: redis://localhost:6379/15
 
-  worker-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install dependencies
+      # ── Links ───────────────────────────────────────────────
+      - name: Test links
+        run: |
+          cd services/links
+          pip install -r requirements.txt -r requirements-test.txt
+          pip install -e ../../shared
+          python -m pytest tests/ -v --tb=short
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///test.db
+          SECRET_KEY: test-secret
+          ENCRYPTION_KEY: "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlcw=="
+          REDIS_URL: redis://localhost:6379/15
+
+      # ── Analytics ───────────────────────────────────────────
+      - name: Test analytics
+        run: |
+          cd services/analytics
+          pip install -r requirements.txt -r requirements-test.txt
+          pip install -e ../../shared
+          python -m pytest tests/ -v --tb=short
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///test.db
+          SECRET_KEY: test-secret
+          REDIS_URL: redis://localhost:6379/15
+
+      # ── Tracker ─────────────────────────────────────────────
+      - name: Test tracker
+        run: |
+          cd services/tracker
+          pip install -r requirements.txt -r requirements-test.txt
+          pip install -e ../../shared
+          python -m pytest tests/ -v --tb=short
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///test.db
+          SECRET_KEY: test-secret
+          REDIS_URL: redis://localhost:6379/15
+
+      # ── Worker ──────────────────────────────────────────────
+      - name: Test worker
         run: |
           cd worker
           pip install -r requirements.txt -r requirements-test.txt
           pip install -e ../shared
-      - name: Run tests
-        run: |
-          cd worker
-          python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+          python -m pytest tests/ -v --tb=short
         env:
           REDIS_URL: redis://localhost:6379/15
           CATALOG_DB_URL: sqlite+aiosqlite:///test.db
@@ -56,35 +93,9 @@ jobs:
           ANALYTICS_DB_URL: sqlite+aiosqlite:///test.db
           ENCRYPTION_KEY: "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlcw=="
 
-  shared-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: |
-          cd shared
-          pip install -e .
-          pip install -r requirements-test.txt
-      - name: Run tests
-        run: |
-          cd shared
-          python -m pytest tests/ -v --tb=short --cov=shared --cov-report=term-missing
-
-  frontend-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install dependencies
+      # ── Frontend ────────────────────────────────────────────
+      - name: Test frontend
         run: |
           cd frontend
           npm install
-      - name: Run tests
-        run: |
-          cd frontend
           npm test
